@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pandas
+xgboost
+scikit-learn
+shap
+joblib
+torch
+torch_geometric
+numpy

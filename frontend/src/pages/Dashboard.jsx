@@ -29,6 +29,7 @@ export default function Dashboard() {
     const [stats, setStats] = useState(null);
     const [selectedAlert, setSelectedAlert] = useState(null);
     const [filterType, setFilterType] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -36,7 +37,11 @@ export default function Dashboard() {
         getSystemStats().then(setStats);
     }, []);
 
-    const filteredAlerts = alerts.filter(a => filterType === 'All' || a.type === filterType);
+    const filteredAlerts = alerts.filter(a => {
+        const matchesType = filterType === 'All' || a.type === filterType;
+        const matchesSearch = a.entity?.toLowerCase().includes(searchQuery.toLowerCase()) || String(a.id).includes(searchQuery);
+        return matchesType && matchesSearch;
+    });
 
     const displayStats = stats ? [
         { label: 'Total Nodes', value: stats.totalScanned, icon: Activity, color: 'text-electricBlue' },
@@ -105,7 +110,16 @@ export default function Dashboard() {
                             <div className="flex gap-3">
                                 <div className="relative">
                                     <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
-                                    <input type="text" placeholder="Search entity..." className="pl-9 pr-4 py-2 text-sm border border-cardBorder rounded-lg w-64 bg-zinc-900/50 focus:outline-none focus:border-electricBlue focus:ring-1 focus:ring-electricBlue transition-colors text-white placeholder-zinc-500 font-mono" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search entity..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="pl-9 pr-10 py-2 text-sm border border-cardBorder rounded-lg w-72 bg-zinc-900/50 focus:outline-none focus:border-electricBlue focus:ring-1 focus:ring-electricBlue transition-colors text-white placeholder-zinc-500 font-mono"
+                                    />
+                                    {searchQuery && (
+                                        <X className="w-4 h-4 text-zinc-400 absolute right-3 top-2.5 cursor-pointer hover:text-white transition-colors" onClick={() => setSearchQuery('')} />
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 border border-cardBorder px-3 py-2 rounded-lg bg-zinc-900/50 text-sm text-zinc-300 transition-colors focus-within:border-electricBlue">
                                     <Filter className="w-3.5 h-3.5 text-zinc-500" />
@@ -253,13 +267,13 @@ export default function Dashboard() {
 
                         <div className="p-5 border-t border-cardBorder bg-zinc-900/80 space-y-3 backdrop-blur-lg">
                             <button
-                                onClick={() => navigate('/investigation')}
+                                onClick={() => navigate(`/investigation?id=${selectedAlert.id}`)}
                                 className="w-full py-3 rounded-xl bg-electricBlue hover:bg-blue-600 text-white font-bold text-xs uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(59,130,246,0.2)] hover:shadow-[0_0_25px_rgba(59,130,246,0.4)] flex items-center justify-center gap-3"
                             >
                                 Deep Investigation <ArrowRight className="w-4 h-4" />
                             </button>
                             <button
-                                onClick={() => navigate('/graph')}
+                                onClick={() => navigate(`/graph?id=${selectedAlert.id}`)}
                                 className="w-full py-3 rounded-xl border border-cardBorder hover:bg-zinc-800 hover:border-zinc-600 text-zinc-300 font-bold text-xs uppercase tracking-widest transition-colors flex items-center justify-center gap-3"
                             >
                                 View Network Graph

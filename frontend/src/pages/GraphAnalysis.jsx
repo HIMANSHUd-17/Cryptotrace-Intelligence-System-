@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function GraphAnalysis() {
     const [graphData, setGraphData] = useState({ nodes: [], links: [] });
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
     const [selectedNode, setSelectedNode] = useState(null);
     const [highlightNodes, setHighlightNodes] = useState(new Set());
     const [highlightLinks, setHighlightLinks] = useState(new Set());
@@ -17,12 +18,20 @@ export default function GraphAnalysis() {
 
     useEffect(() => {
         setLoading(true);
-        getGraph('mock-id').then(data => {
-            setGraphData(data);
-            setLoading(false);
-            if (graphRef.current) {
-                setTimeout(() => graphRef.current.zoomToFit(400, 50), 100);
-            }
+        import('../api').then(({ getAlerts, getGraph }) => {
+            getAlerts().then(alerts => {
+                const searchParams = new URLSearchParams(window.location.search);
+                const queryId = searchParams.get('id');
+                const targetId = queryId || 'global';
+
+                getGraph(targetId).then(data => {
+                    setGraphData(data);
+                    setLoading(false);
+                    if (graphRef.current) {
+                        setTimeout(() => graphRef.current.zoomToFit(400, 50), 100);
+                    }
+                });
+            });
         });
     }, []);
 
@@ -76,65 +85,76 @@ export default function GraphAnalysis() {
     const paintNode = useCallback((node, ctx, globalScale) => {
         const isDimmed = (selectedNode || hoverNode) && !highlightNodes.has(node.id);
         const isHighRisk = node.risk === 'High';
+        const isSelected = selectedNode?.id === node.id;
+        const isHovered = hoverNode?.id === node.id;
+
+        // Base sizing
+        const baseSize = node.val * 0.8;
+        const size = (isSelected || isHovered) ? baseSize * 1.3 : baseSize;
+
+        // Brand Colors
+        let themeColor = '#059669'; // Safe/Low - Emerald
+        if (node.risk === 'High') themeColor = '#e11d48'; // High - Rose
+        else if (node.risk === 'Medium') themeColor = '#d97706'; // Medium - Amber
 
         ctx.beginPath();
-        const size = node.val * 1.5;
-
-        if (node.type === 'Wallet') {
-            ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
-        } else if (node.type === 'TX') {
-            ctx.rect(node.x - size, node.y - size, size * 2, size * 2);
-        } else if (node.type === 'IP') {
-            ctx.moveTo(node.x, node.y - size);
-            ctx.lineTo(node.x + size, node.y + size);
-            ctx.lineTo(node.x - size, node.y + size);
-        }
-
-        // Set Colors
-        let fillColor = '#059669'; // low
-        if (node.risk === 'High') fillColor = '#e11d48';
-        else if (node.risk === 'Medium') fillColor = '#d97706';
+        // We will render all entities as polished orbs for a premium constellation network feel
+        ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
 
         if (isDimmed) {
-            fillColor = 'rgba(100, 100, 100, 0.2)';
-            ctx.fillStyle = fillColor;
+            ctx.fillStyle = 'rgba(30, 30, 30, 0.5)';
             ctx.shadowBlur = 0;
             ctx.fill();
-        } else {
-            ctx.fillStyle = fillColor;
-
-            // Add Glow
-            if (isHighRisk) {
-                ctx.shadowColor = 'rgba(225, 29, 72, 0.8)';
-                ctx.shadowBlur = 15;
-            } else if (selectedNode?.id === node.id) {
-                ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
-                ctx.shadowBlur = 15;
-                ctx.fillStyle = '#3b82f6';
-            } else {
-                ctx.shadowBlur = 0;
-            }
-
-            ctx.fill();
-
-            // Border
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = isHighRisk ? '#fff' : 'rgba(255, 255, 255, 0.8)';
-            ctx.lineWidth = 0.5 / globalScale;
-            if (selectedNode?.id === node.id) {
-                ctx.lineWidth = 1.5 / globalScale;
-                ctx.strokeStyle = '#fff';
-            }
+            ctx.strokeStyle = 'rgba(100, 100, 100, 0.1)';
+            ctx.lineWidth = 0.2 / globalScale;
             ctx.stroke();
+        } else {
+            // Neon Tinted Glass Fill
+            ctx.fillStyle = isSelected
+                ? 'rgba(59, 130, 246, 0.3)' // Electric Blue for selection
+                : `${themeColor}33`; // 20% opacity hex tint
+
+            // Intense Outer Glow
+            ctx.shadowColor = isSelected ? '#3b82f6' : themeColor;
+            ctx.shadowBlur = isHighRisk || isSelected ? 20 : 10;
+            ctx.fill();
+
+            // Crisp Cyber Border
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = isSelected ? '#fff' : themeColor;
+            ctx.lineWidth = isSelected ? (2 / globalScale) : (1 / globalScale);
+            ctx.stroke();
+
+            // Bright Inner Core (The "Node Energy")
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, size * 0.25, 0, 2 * Math.PI, false);
+            ctx.fillStyle = isSelected ? '#fff' : themeColor;
+            ctx.fill();
+
+            // Outer Ring for specific types (e.g. TX vs Wallet)
+            if (node.type === 'TX') {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, size + (3 / globalScale), 0, 2 * Math.PI, false);
+                ctx.setLineDash([4 / globalScale, 4 / globalScale]);
+                ctx.strokeStyle = isSelected ? 'rgba(255,255,255,0.4)' : `${themeColor}66`;
+                ctx.lineWidth = 0.5 / globalScale;
+                ctx.stroke();
+                ctx.setLineDash([]); // reset
+            }
         }
 
         // Add ID label for non-dimmed nodes if scaled up
-        if (!isDimmed && globalScale >= 3) {
-            ctx.font = `${4 / globalScale}px ui-monospace, SFMono-Regular, monospace`;
+        if (!isDimmed && globalScale >= 2.5) {
+            ctx.font = `600 ${4 / globalScale}px ui-sans-serif, system-ui, sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            ctx.fillText(node.label || node.id, node.x, node.y + size + (2 / globalScale));
+            ctx.fillStyle = isSelected ? '#fff' : 'rgba(255, 255, 255, 0.9)';
+            ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur = 4 / globalScale;
+
+            const labelText = node.label || node.id;
+            ctx.fillText(labelText, node.x, node.y + size + (4 / globalScale));
+            ctx.shadowBlur = 0; // reset
         }
 
     }, [selectedNode, hoverNode, highlightNodes]);
@@ -173,11 +193,44 @@ export default function GraphAnalysis() {
             />
 
             {/* Floating Top Search Bar */}
-            <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="absolute top-6 left-1/2 -translate-x-1/2 z-20">
-                <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-3 w-[400px]">
+            <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center">
+                <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-3 w-[450px]">
                     <Search className="w-4 h-4 text-zinc-500" />
-                    <input type="text" placeholder="Search entity in graph..." className="bg-transparent focus:outline-none text-zinc-200 text-sm flex-1 font-mono placeholder:font-sans placeholder-zinc-500" />
+                    <input
+                        type="text"
+                        placeholder="Search entity in graph..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="bg-transparent focus:outline-none text-zinc-200 text-sm flex-1 font-mono placeholder:font-sans placeholder-zinc-500"
+                    />
+                    {search && <X className="w-4 h-4 text-zinc-400 cursor-pointer hover:text-white transition-colors" onClick={() => { setSearch(''); setSelectedNode(null); }} />}
                 </div>
+
+                {/* Autocomplete Dropdown */}
+                {search && (
+                    <div className="mt-2 w-[450px] bg-darkBg/95 backdrop-blur-xl border border-cardBorder rounded-xl shadow-2xl max-h-[300px] overflow-y-auto">
+                        {graphData.nodes
+                            .filter(n => String(n.id).includes(search) || (n.label && String(n.label).includes(search)))
+                            .slice(0, 10).map(n => (
+                                <div
+                                    key={n.id}
+                                    onClick={() => {
+                                        setSearch(n.id);
+                                        handleNodeClick(n);
+                                    }}
+                                    className="px-5 py-3 hover:bg-electricBlue/10 cursor-pointer border-b border-cardBorder/50 last:border-0 flex justify-between items-center group transition-colors"
+                                >
+                                    <span className="text-sm font-mono text-zinc-300 group-hover:text-electricBlue transition-colors">{n.id}</span>
+                                    <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${n.risk === 'High' ? 'bg-riskHigh/20 text-riskHigh' : n.risk === 'Medium' ? 'bg-riskMedium/20 text-riskMedium' : 'bg-riskLow/20 text-riskLow'}`}>
+                                        {n.risk} Node
+                                    </span>
+                                </div>
+                            ))}
+                        {graphData.nodes.filter(n => String(n.id).includes(search) || (n.label && String(n.label).includes(search))).length === 0 && (
+                            <div className="px-5 py-4 text-xs text-center text-zinc-500">No nodes found in current subgraph.</div>
+                        )}
+                    </div>
+                )}
             </motion.div>
 
             {/* Bottom Legend */}

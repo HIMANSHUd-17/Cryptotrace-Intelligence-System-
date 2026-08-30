@@ -25,13 +25,67 @@ export default function Investigation() {
     useEffect(() => {
         getAlerts().then(data => {
             setAlerts(data);
-            if (data.length > 0) {
-                const urlId = new URLSearchParams(window.location.search).get('id');
-                const target = urlId ? data.find(a => a.id === urlId) : null;
-                setSelectedEntity(target || data[0]);
+            const urlId = new URLSearchParams(window.location.search).get('id');
+            if (urlId) {
+                import('../api').then(async ({ investigateLive }) => {
+                    const res = await investigateLive(urlId);
+                    if (!res.error) {
+                        setSelectedEntity({
+                            id: res.tx_id,
+                            score: Math.round(res.risk_score),
+                            severity: res.risk_score > 60 ? 'High' : 'Medium',
+                            type: res.type || 'TX',
+                            reasons: ["Cross-linked Target Scanned via ML Node"],
+                            details: {
+                                timestamp: new Date().toISOString(),
+                                totalReceived: "Unknown (Live Endpoint)",
+                                totalSent: "Unknown (Live Endpoint)",
+                                currentBalance: "Unknown (Live Endpoint)",
+                                firstSeen: "Unknown",
+                                associatedHash: "Cross-link Execution Complete"
+                            },
+                            features: res.top_reasons,
+                            timeline: [],
+                            flow: []
+                        });
+                    } else {
+                        const target = data.find(a => String(a.id) === String(urlId));
+                        setSelectedEntity(target || (data.length > 0 ? data[0] : null));
+                    }
+                });
+            } else if (data.length > 0) {
+                setSelectedEntity(data[0]);
             }
         });
     }, []);
+
+    const handleSearch = async (e) => {
+        if (e.key === 'Enter' && search.trim() !== '') {
+            import('../api').then(async ({ investigateLive }) => {
+                const res = await investigateLive(search.trim());
+                if (!res.error) {
+                    setSelectedEntity({
+                        id: res.tx_id,
+                        score: Math.round(res.risk_score),
+                        severity: res.risk_score > 60 ? 'High' : 'Medium',
+                        type: 'TX',
+                        reasons: ["Live Target Scanned via ML Node"],
+                        details: {
+                            timestamp: new Date().toISOString(),
+                            totalReceived: "Unknown (Live Endpoint)",
+                            totalSent: "Unknown (Live Endpoint)",
+                            currentBalance: "Unknown (Live Endpoint)",
+                            firstSeen: "Unknown",
+                            associatedHash: "Pending Graph Execution..."
+                        },
+                        features: res.top_reasons,
+                        timeline: [],
+                        flow: []
+                    });
+                }
+            });
+        }
+    };
 
     return (
         <div className="flex flex-col lg:flex-row h-full w-full bg-darkBg text-zinc-300">
@@ -46,31 +100,37 @@ export default function Investigation() {
                             placeholder="Enter Address, TXID, IP..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 border border-cardBorder/50 bg-zinc-950/50 rounded-md focus:outline-none focus:border-electricBlue focus:ring-1 focus:ring-electricBlue text-sm transition-colors text-zinc-200"
+                            onKeyDown={handleSearch}
+                            className="w-full pl-9 pr-10 py-2 border border-cardBorder/50 bg-zinc-950/50 rounded-md focus:outline-none focus:border-electricBlue focus:ring-1 focus:ring-electricBlue text-sm transition-colors text-zinc-200"
                         />
+                        {search && (
+                            <X className="w-4 h-4 text-zinc-500 absolute right-3 top-2.5 cursor-pointer hover:text-white" onClick={() => setSearch('')} />
+                        )}
                     </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-3">
                     <h3 className="text-xs font-semibold text-zinc-500 tracking-wider mb-2 px-2">RECENTLY FLAGGED</h3>
                     <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-1.5">
-                        {alerts.slice(0, 15).map((entity, i) => (
-                            <motion.div
-                                variants={itemVariants}
-                                key={entity.id}
-                                onClick={() => setSelectedEntity(entity)}
-                                className={`p-3 rounded-lg border border-transparent hover:border-cardBorder/50 hover:bg-zinc-800/50 cursor-pointer transition-colors ${selectedEntity?.id === entity.id ? 'bg-zinc-800/80 border-cardBorder/50 border-l-2 border-l-riskHigh' : ''}`}
-                            >
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="font-mono text-xs text-electricBlue/90 truncate w-3/4">{entity.id}</span>
-                                    <span className={`w-2 h-2 mt-1 rounded-full ${entity.severity === 'High' ? 'bg-riskHigh shadow-[0_0_8px_theme("colors.riskHigh")]' : entity.severity === 'Medium' ? 'bg-riskMedium' : 'bg-riskLow'}`}></span>
-                                </div>
-                                <div className="flex justify-between items-center text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
-                                    <span>{entity.type}</span>
-                                    <span>{new Date(entity.details.timestamp).toLocaleTimeString()}</span>
-                                </div>
-                            </motion.div>
-                        ))}
+                        {alerts
+                            .filter(a => search.trim() === '' || String(a.id).includes(search) || a.entity?.includes(search))
+                            .slice(0, 15).map((entity, i) => (
+                                <motion.div
+                                    variants={itemVariants}
+                                    key={entity.id}
+                                    onClick={() => setSelectedEntity(entity)}
+                                    className={`p-3 rounded-lg border border-transparent hover:border-cardBorder/50 hover:bg-zinc-800/50 cursor-pointer transition-colors ${selectedEntity?.id === entity.id ? 'bg-zinc-800/80 border-cardBorder/50 border-l-2 border-l-riskHigh' : ''}`}
+                                >
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-mono text-xs text-electricBlue/90 truncate w-3/4">{entity.id}</span>
+                                        <span className={`w-2 h-2 mt-1 rounded-full ${entity.severity === 'High' ? 'bg-riskHigh shadow-[0_0_8px_theme("colors.riskHigh")]' : entity.severity === 'Medium' ? 'bg-riskMedium' : 'bg-riskLow'}`}></span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
+                                        <span>{entity.type}</span>
+                                        <span>{new Date(entity.details.timestamp).toLocaleTimeString()}</span>
+                                    </div>
+                                </motion.div>
+                            ))}
                     </motion.div>
                 </div>
             </div>
