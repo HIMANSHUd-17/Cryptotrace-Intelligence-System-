@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #09090b;
+    color: #d4d4d8;
+    @apply antialiased font-sans;
+  }
+}
+
+.glass-panel {
+  background-color: rgba(24, 24, 27, 0.8);
+  border-color: rgba(255, 255, 255, 0.1);
+  @apply backdrop-blur-md border shadow-xl;
+}
+
+.glow-red {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
