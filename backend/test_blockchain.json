@@ -1,0 +1,1 @@
+[{"txid": "tx_123", "amount": 1.5, "fee": 0.01, "input_wallets": ["w1"], "output_wallets": ["w2"]}, {"txid": "tx_125", "amount": 2.0, "fee": 0.02, "input_wallets": ["w3"], "output_wallets": ["w4"]}, {"amount": 3.0}]

@@ -1,28 +1,58 @@
-import React, { useState, useEffect } from 'react';
-import { Activity, ShieldAlert, Cpu, Network, Zap, Search, Filter, X, CheckCircle2, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Activity, ShieldAlert, Cpu, Network, Zap, Search, Filter, X, CheckCircle2, ArrowRight, Upload } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { getAlerts, getSystemStats } from '../api';
-
-const mockRiskDistribution = [
-    { name: 'High', value: 33, color: '#e11d48' },
-    { name: 'Medium', value: 45, color: '#d97706' },
-    { name: 'Low', value: 22, color: '#059669' }
-];
+import { getAlerts, getSystemStats, API_BASE } from '../api';
 
 const containerVariants = {
     hidden: { opacity: 0 },
     show: {
         opacity: 1,
-        transition: { staggerChildren: 0.1 }
+        transition: { staggerChildren: 0.05 }
     }
 };
 
 const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+    hidden: { opacity: 0, y: 15 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 350, damping: 25 } }
 };
+
+// React.memo memoized table row component to eliminate unnecessary re-renders
+const AlertRow = React.memo(({ alert: a, isSelected, onSelect }) => {
+    return (
+        <tr
+            onClick={() => onSelect(a)}
+            className={`hover:bg-white/5 cursor-pointer transition-colors ${isSelected ? 'bg-electricBlue/10 border-l-2 border-l-electricBlue group' : 'border-l-2 border-l-transparent'}`}
+        >
+            <td className="px-6 py-4 font-bold text-zinc-500">#{a.rank}</td>
+            <td className="px-6 py-4 font-mono text-xs text-electricBlue/90 break-all">{a.entity}</td>
+            <td className="px-6 py-4">
+                <span className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider ${a.type === 'IP' ? 'bg-blue-900/40 text-blue-400 border border-blue-500/30' : a.type === 'Wallet' ? 'bg-purple-900/40 text-purple-400 border border-purple-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
+                    {a.type}
+                </span>
+            </td>
+            <td className="px-6 py-4 text-right font-mono font-bold text-white">
+                <div className="flex items-center justify-end gap-3">
+                    <span>{a.score}</span>
+                    <div className="w-12 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${a.score >= 90 ? 'bg-riskHigh shadow-[0_0_8px_theme("colors.riskHigh")]' : a.score > 60 ? 'bg-riskMedium' : 'bg-riskLow'}`} style={{ width: `${a.score}%` }}></div>
+                    </div>
+                </div>
+            </td>
+            <td className="px-6 py-4 text-center font-mono text-zinc-400 text-xs">{a.confidence}%</td>
+            <td className="px-6 py-4">
+                <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${a.severity === 'High' ? 'bg-riskHigh animate-pulse shadow-[0_0_8px_theme("colors.riskHigh")]' : a.severity === 'Medium' ? 'bg-riskMedium' : 'bg-riskLow'}`}></span>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${a.severity === 'High' ? 'text-zinc-200' : 'text-zinc-500'}`}>{a.severity}</span>
+                </div>
+            </td>
+            <td className="px-6 py-4">
+                <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider border ${a.status === 'New' || a.status === 'New Correlation' ? 'border-riskMedium/30 text-riskMedium bg-riskMedium/10' : a.status === 'Reviewing' ? 'border-electricBlue/30 text-electricBlue bg-electricBlue/10' : 'border-zinc-700 text-zinc-500 bg-zinc-800'}`}>{a.status}</span>
+            </td>
+        </tr>
+    );
+});
 
 export default function Dashboard() {
     const [alerts, setAlerts] = useState([]);
@@ -30,26 +60,84 @@ export default function Dashboard() {
     const [selectedAlert, setSelectedAlert] = useState(null);
     const [filterType, setFilterType] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
-        getAlerts().then(setAlerts);
-        getSystemStats().then(setStats);
+        // Parallel data loading
+        Promise.all([getAlerts(), getSystemStats()]).then(([alertsData, statsData]) => {
+            setAlerts(Array.isArray(alertsData) ? alertsData : []);
+            setStats(statsData);
+        });
     }, []);
 
-    const filteredAlerts = alerts.filter(a => {
-        const matchesType = filterType === 'All' || a.type === filterType;
-        const matchesSearch = a.entity?.toLowerCase().includes(searchQuery.toLowerCase()) || String(a.id).includes(searchQuery);
-        return matchesType && matchesSearch;
-    });
+    const safeAlerts = useMemo(() => Array.isArray(alerts) ? alerts : [], [alerts]);
 
-    const displayStats = stats ? [
+    // Fast memoized filtering logic
+    const filteredAlerts = useMemo(() => {
+        return safeAlerts.filter(a => {
+            const matchesType = filterType === 'All'
+                || a.type === filterType
+                || (filterType === 'High' && a.severity === 'High')
+                || (filterType === 'Medium' && a.severity === 'Medium')
+                || (filterType === 'Safe' && a.severity === 'Low');
+            const matchesSearch = a.entity?.toLowerCase().includes(searchQuery.toLowerCase()) || String(a.id).includes(searchQuery);
+            return matchesType && matchesSearch;
+        });
+    }, [safeAlerts, filterType, searchQuery]);
+
+    const handleUpload = useCallback(async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        let dataType = 'blockchain';
+        if (file.name.toLowerCase().includes('network') || file.name.toLowerCase().includes('ip')) {
+            dataType = 'network';
+        }
+        formData.append('data_type', dataType);
+
+        try {
+            await fetch(`${API_BASE}/ingest`, {
+                method: 'POST',
+                body: formData
+            });
+            const { clearCache } = await import('../api');
+            clearCache();
+            const [freshAlerts, freshStats] = await Promise.all([getAlerts(), getSystemStats()]);
+            setAlerts(Array.isArray(freshAlerts) ? freshAlerts : []);
+            setStats(freshStats);
+            alert(`Successfully ingested ${file.name} as ${dataType} data.`);
+        } catch (error) {
+            alert('Failed to upload file.');
+        } finally {
+            setIsUploading(false);
+            e.target.value = null;
+        }
+    }, []);
+
+    const handleSelectAlert = useCallback((alertItem) => {
+        setSelectedAlert(alertItem);
+    }, []);
+
+    const illicitCount = useMemo(() => safeAlerts.filter(a => a.severity === 'High').length, [safeAlerts]);
+
+    const displayStats = useMemo(() => stats ? [
         { label: 'Total Nodes', value: stats.totalScanned, icon: Activity, color: 'text-electricBlue' },
-        { label: 'Illicit Entities', value: stats.illicit, icon: ShieldAlert, color: 'text-riskHigh', isAlert: true },
-        { label: 'Licit Entities', value: stats.licit, icon: Network, color: 'text-riskMedium' },
-        { label: 'Unknown Classes', value: stats.unknown, icon: Zap, color: 'text-zinc-400' },
-        { label: 'Graph Links Discovered', value: stats.edges, icon: Cpu, color: 'text-zinc-400' },
-    ] : [];
+        { label: 'Illicit Entities', value: illicitCount, icon: ShieldAlert, color: 'text-riskHigh', isAlert: true },
+        { label: 'Licit Entities', value: Math.max(0, (stats.licit || 0) - illicitCount), icon: Network, color: 'text-riskMedium' },
+        { label: 'Unknown Classes', value: stats.unknown || 0, icon: Zap, color: 'text-zinc-400' },
+        { label: 'Graph Links Discovered', value: stats.edges || 0, icon: Cpu, color: 'text-zinc-400' },
+    ] : [], [stats, illicitCount]);
+
+    const riskDistribution = useMemo(() => [
+        { name: 'High', value: illicitCount, color: '#e11d48' },
+        { name: 'Medium', value: safeAlerts.filter(a => a.severity === 'Medium').length, color: '#d97706' },
+        { name: 'Low', value: safeAlerts.filter(a => a.severity === 'Low').length, color: '#059669' }
+    ], [illicitCount, safeAlerts]);
 
     return (
         <div className="flex h-full relative overflow-hidden bg-transparent">
@@ -73,13 +161,13 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                     {/* Charts Panel */}
-                    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="glass-panel p-6 rounded-2xl lg:col-span-1 flex flex-col h-[400px]">
+                    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="glass-panel p-6 rounded-2xl lg:col-span-1 flex flex-col h-[400px]">
                         <h3 className="text-xs font-bold text-zinc-500 mb-6 uppercase tracking-widest">Risk Distribution</h3>
                         <div className="flex-1 w-full relative">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie data={mockRiskDistribution} innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value" stroke="none">
-                                        {mockRiskDistribution.map((entry, index) => (
+                                    <Pie data={riskDistribution} innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value" stroke="none">
+                                        {riskDistribution.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} style={{ filter: `drop-shadow(0px 0px 8px ${entry.color}80)` }} />
                                         ))}
                                     </Pie>
@@ -88,51 +176,74 @@ export default function Dashboard() {
                             </ResponsiveContainer>
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                 <div className="text-center">
-                                    <span className="block text-2xl font-bold text-white tracking-tighter">100</span>
+                                    <span className="block text-2xl font-bold text-white tracking-tighter">{safeAlerts.length}</span>
                                     <span className="block text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Total</span>
                                 </div>
                             </div>
                         </div>
                         <div className="flex justify-between text-[11px] mt-6 font-semibold text-zinc-400 tracking-wider">
-                            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-riskHigh shadow-[0_0_8px_theme('colors.riskHigh')] block"></span> HIGH</span>
-                            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-riskMedium block"></span> MED</span>
-                            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-riskLow block"></span> SAFE</span>
+                            <button onClick={() => setFilterType(filterType === 'High' ? 'All' : 'High')} className={`flex items-center gap-1.5 px-2 py-1 rounded transition-colors ${filterType === 'High' ? 'bg-riskHigh/20 text-white border border-riskHigh/40' : 'hover:text-white'}`}>
+                                <span className="w-2 h-2 rounded-full bg-riskHigh shadow-[0_0_8px_theme('colors.riskHigh')] block"></span> HIGH
+                            </button>
+                            <button onClick={() => setFilterType(filterType === 'Medium' ? 'All' : 'Medium')} className={`flex items-center gap-1.5 px-2 py-1 rounded transition-colors ${filterType === 'Medium' ? 'bg-riskMedium/20 text-white border border-riskMedium/40' : 'hover:text-white'}`}>
+                                <span className="w-2 h-2 rounded-full bg-riskMedium block"></span> MED
+                            </button>
+                            <button onClick={() => setFilterType(filterType === 'Safe' ? 'All' : 'Safe')} className={`flex items-center gap-1.5 px-2 py-1 rounded transition-colors ${filterType === 'Safe' ? 'bg-riskLow/20 text-white border border-riskLow/40' : 'hover:text-white'}`}>
+                                <span className="w-2 h-2 rounded-full bg-riskLow block"></span> SAFE
+                            </button>
                         </div>
                     </motion.div>
 
                     {/* Table Panel */}
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-panel rounded-2xl lg:col-span-3 flex flex-col h-[400px]">
-                        <div className="p-5 border-b border-cardBorder flex justify-between items-center bg-zinc-900/30 rounded-t-2xl">
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="glass-panel rounded-2xl lg:col-span-3 flex flex-col h-[400px]">
+                        <div className="p-5 border-b border-cardBorder flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-zinc-900/30 rounded-t-2xl">
                             <h2 className="text-sm font-bold tracking-widest text-zinc-200 uppercase flex items-center gap-2">
                                 <Activity className="w-4 h-4 text-electricBlue" /> Ranked Alerts
                             </h2>
 
-                            <div className="flex gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div>
+                                    <input
+                                        type="file"
+                                        id="upload-data"
+                                        className="hidden"
+                                        onChange={handleUpload}
+                                        accept=".csv,.json,.xml"
+                                    />
+                                    <label
+                                        htmlFor="upload-data"
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest cursor-pointer transition-all ${isUploading ? 'bg-zinc-800 text-zinc-500' : 'bg-electricBlue hover:bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]'}`}
+                                    >
+                                        <Upload className="w-3.5 h-3.5" />
+                                        {isUploading ? 'Ingesting...' : 'Upload Data'}
+                                    </label>
+                                </div>
                                 <div className="relative">
-                                    <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+                                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
                                     <input
                                         type="text"
                                         placeholder="Search entity..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="pl-9 pr-10 py-2 text-sm border border-cardBorder rounded-lg w-72 bg-zinc-900/50 focus:outline-none focus:border-electricBlue focus:ring-1 focus:ring-electricBlue transition-colors text-white placeholder-zinc-500 font-mono"
+                                        className="pl-8 pr-8 py-1.5 text-xs border border-cardBorder rounded-lg w-52 bg-zinc-900/50 focus:outline-none focus:border-electricBlue focus:ring-1 focus:ring-electricBlue transition-colors text-white placeholder-zinc-500 font-mono"
                                     />
                                     {searchQuery && (
-                                        <X className="w-4 h-4 text-zinc-400 absolute right-3 top-2.5 cursor-pointer hover:text-white transition-colors" onClick={() => setSearchQuery('')} />
+                                        <X className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-2.5 cursor-pointer hover:text-white transition-colors" onClick={() => setSearchQuery('')} />
                                     )}
                                 </div>
-                                <div className="flex items-center gap-2 border border-cardBorder px-3 py-2 rounded-lg bg-zinc-900/50 text-sm text-zinc-300 transition-colors focus-within:border-electricBlue">
-                                    <Filter className="w-3.5 h-3.5 text-zinc-500" />
-                                    <select
-                                        className="bg-transparent focus:outline-none cursor-pointer text-xs font-semibold tracking-wide uppercase"
-                                        value={filterType}
-                                        onChange={(e) => setFilterType(e.target.value)}
-                                    >
-                                        <option value="All" className="bg-zinc-900">All</option>
-                                        <option value="Wallet" className="bg-zinc-900">Wallet</option>
-                                        <option value="TX" className="bg-zinc-900">TX</option>
-                                        <option value="IP" className="bg-zinc-900">IP</option>
-                                    </select>
+
+                                {/* Filter Button Bar & Dropdown */}
+                                <div className="flex items-center gap-1 bg-zinc-900/80 p-1 border border-cardBorder rounded-lg">
+                                    <Filter className="w-3.5 h-3.5 text-zinc-500 ml-1" />
+                                    {['All', 'TX', 'IP', 'Wallet'].map(t => (
+                                        <button
+                                            key={t}
+                                            onClick={() => setFilterType(t)}
+                                            className={`px-2.5 py-1 rounded text-xs font-semibold uppercase transition-all ${filterType === t ? 'bg-electricBlue text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}`}
+                                        >
+                                            {t}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
                         </div>
@@ -150,41 +261,23 @@ export default function Dashboard() {
                                         <th className="px-6 py-4">Status</th>
                                     </tr>
                                 </thead>
-                                <motion.tbody variants={containerVariants} initial="hidden" animate="show" className="divide-y divide-cardBorder">
+                                <tbody className="divide-y divide-cardBorder">
                                     {filteredAlerts.map(a => (
-                                        <motion.tr
-                                            variants={itemVariants}
+                                        <AlertRow
                                             key={a.id}
-                                            onClick={() => setSelectedAlert(a)}
-                                            className={`hover:bg-white/5 cursor-pointer transition-colors ${selectedAlert?.id === a.id ? 'bg-electricBlue/10 border-l-2 border-l-electricBlue group' : 'border-l-2 border-l-transparent'}`}
-                                        >
-                                            <td className="px-6 py-4 font-bold text-zinc-500">#{a.rank}</td>
-                                            <td className="px-6 py-4 font-mono text-xs text-electricBlue/90">{a.entity}</td>
-                                            <td className="px-6 py-4">
-                                                <span className="px-2 py-1 bg-zinc-800 text-zinc-400 rounded text-[10px] font-bold tracking-wider">{a.type}</span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-mono font-bold text-white">
-                                                <div className="flex items-center justify-end gap-3">
-                                                    <span>{a.score}</span>
-                                                    <div className="w-12 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                                                        <div className={`h-full rounded-full ${a.score >= 90 ? 'bg-riskHigh shadow-[0_0_8px_theme("colors.riskHigh")]' : a.score > 60 ? 'bg-riskMedium' : 'bg-riskLow'}`} style={{ width: `${a.score}%` }}></div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center font-mono text-zinc-400 text-xs">{a.confidence}%</td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-2 h-2 rounded-full ${a.severity === 'High' ? 'bg-riskHigh animate-pulse shadow-[0_0_8px_theme("colors.riskHigh")]' : a.severity === 'Medium' ? 'bg-riskMedium' : 'bg-riskLow'}`}></span>
-                                                    <span className={`text-[11px] font-bold uppercase tracking-wider ${a.severity === 'High' ? 'text-zinc-200' : 'text-zinc-500'}`}>{a.severity}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider border ${a.status === 'New' ? 'border-riskMedium/30 text-riskMedium bg-riskMedium/10' : a.status === 'Reviewing' ? 'border-electricBlue/30 text-electricBlue bg-electricBlue/10' : 'border-zinc-700 text-zinc-500 bg-zinc-800'}`}>{a.status}</span>
-                                            </td>
-                                        </motion.tr>
+                                            alert={a}
+                                            isSelected={selectedAlert?.id === a.id}
+                                            onSelect={handleSelectAlert}
+                                        />
                                     ))}
-                                    {alerts.length === 0 && (<tr><td colSpan="7" className="text-center py-12 text-zinc-500 font-mono text-xs uppercase tracking-widest"><motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }}>Decrypting feeds...</motion.div></td></tr>)}
-                                </motion.tbody>
+                                    {filteredAlerts.length === 0 && (
+                                        <tr>
+                                            <td colSpan="7" className="text-center py-12 text-zinc-500 font-mono text-xs uppercase tracking-widest">
+                                                No matching alerts found for filter: <span className="text-electricBlue font-bold">{filterType}</span>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
                             </table>
                         </div>
                     </motion.div>
@@ -201,7 +294,8 @@ export default function Dashboard() {
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                         className="fixed right-0 top-[73px] bottom-0 w-[420px] bg-darkBg/95 backdrop-blur-xl border-l border-cardBorder flex flex-col z-40 shadow-2xl"
                     >
-                        <div className="p-5 border-b border-cardBorder flex justify-between items-start bg-zinc-900/50">
+                        {/* Permanently Anchored Sticky Close Bar */}
+                        <div className="p-5 border-b border-cardBorder flex justify-between items-start bg-zinc-900/80 sticky top-0 z-50 backdrop-blur-md">
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="relative flex h-3 w-3">
@@ -210,10 +304,16 @@ export default function Dashboard() {
                                     </span>
                                     <h3 className="font-bold text-white tracking-wide">Primary Target Profile</h3>
                                 </div>
-                                <p className="text-xs text-electricBlue font-mono bg-electricBlue/10 px-2 py-1 rounded border border-electricBlue/20 inline-block">{selectedAlert.entity}</p>
+                                <p className="text-xs text-electricBlue font-mono bg-electricBlue/10 px-2 py-1 rounded border border-electricBlue/20 inline-block break-all">{selectedAlert.entity}</p>
                             </div>
-                            <button onClick={() => setSelectedAlert(null)} className="p-1.5 hover:bg-zinc-800 rounded-md text-zinc-500 hover:text-white transition-colors border border-transparent hover:border-cardBorder">
-                                <X className="w-4 h-4" />
+
+                            {/* Permanently Visible & Anchored Close Button */}
+                            <button
+                                onClick={() => setSelectedAlert(null)}
+                                title="Close Panel"
+                                className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-lg transition-colors border border-cardBorder shadow-md cursor-pointer shrink-0 ml-4"
+                            >
+                                <X className="w-5 h-5" />
                             </button>
                         </div>
 
@@ -232,11 +332,11 @@ export default function Dashboard() {
                             <div>
                                 <h4 className="text-[10px] font-bold uppercase text-zinc-500 mb-4 tracking-widest">Why Flagged?</h4>
                                 <div className="space-y-3">
-                                    {selectedAlert.reasons.map((reason, idx) => (
-                                        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + (idx * 0.1) }} key={idx} className="flex gap-3 items-start bg-zinc-900/40 p-3 rounded-lg border border-white/5">
+                                    {(selectedAlert.reasons || []).map((reason, idx) => (
+                                        <div key={idx} className="flex gap-3 items-start bg-zinc-900/40 p-3 rounded-lg border border-white/5">
                                             <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${selectedAlert.severity === 'High' ? 'text-riskHigh drop-shadow-[0_0_5px_theme("colors.riskHigh")]' : 'text-riskMedium'}`} />
                                             <span className="text-xs text-zinc-300 leading-relaxed">{reason}</span>
-                                        </motion.div>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
@@ -245,19 +345,17 @@ export default function Dashboard() {
                             <div>
                                 <h4 className="text-[10px] font-bold uppercase text-zinc-500 mb-4 tracking-widest">Model Feature Attributions</h4>
                                 <div className="space-y-4 bg-zinc-900/40 p-4 rounded-xl border border-white/5">
-                                    {selectedAlert.features.map((f, i) => (
+                                    {(selectedAlert.features || []).map((f, i) => (
                                         <div key={i} className="space-y-2">
                                             <div className="flex justify-between text-xs">
                                                 <span className="text-zinc-400 uppercase font-semibold tracking-wider text-[9px]">{f.name}</span>
                                                 <span className="font-bold text-electricBlue font-mono">{f.value}%</span>
                                             </div>
                                             <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
-                                                <motion.div
-                                                    initial={{ width: 0 }}
-                                                    animate={{ width: `${f.value}%` }}
-                                                    transition={{ duration: 1, delay: 0.5 + (i * 0.1), ease: "easeOut" }}
+                                                <div
+                                                    style={{ width: `${f.value}%` }}
                                                     className="h-full rounded-full bg-electricBlue shadow-[0_0_8px_theme('colors.electricBlue')]"
-                                                ></motion.div>
+                                                ></div>
                                             </div>
                                         </div>
                                     ))}

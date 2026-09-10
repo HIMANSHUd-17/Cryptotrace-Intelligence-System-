@@ -27,9 +27,9 @@ function NavLink({ to, children }) {
 function App() {
     return (
         <Router>
-            <div className="min-h-screen bg-[#09090b] text-zinc-300 flex flex-col font-sans overflow-hidden">
+            <div className="h-screen w-screen bg-[#09090b] text-zinc-300 flex flex-col font-sans overflow-hidden">
                 {/* Top Navbar - Glassmorphism */}
-                <header className="relative z-50 flex items-center justify-between px-6 py-4 bg-[#09090b]/80 backdrop-blur-md border-b border-white/5 shadow-2xl">
+                <header className="shrink-0 relative z-50 flex items-center justify-between px-6 py-4 bg-[#09090b]/80 backdrop-blur-md border-b border-white/5 shadow-2xl">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded bg-gradient-to-br from-indigo-500 to-rose-500 flex items-center justify-center shadow-[0_0_15px_rgba(225,29,72,0.4)]">
                             <span className="text-white font-bold font-mono text-lg tracking-tighter">CT</span>
@@ -44,7 +44,7 @@ function App() {
                 </header>
 
                 {/* Main Layout Area */}
-                <main className="flex-1 overflow-hidden relative isolate">
+                <main className="flex-1 min-h-0 overflow-hidden relative isolate">
                     <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-zinc-950 to-zinc-950 pointer-events-none"></div>
                     <Routes>
                         <Route path="/" element={<Dashboard />} />

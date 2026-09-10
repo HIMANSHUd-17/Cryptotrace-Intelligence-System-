@@ -1,0 +1,51 @@
+[
+  {
+    "txid": "tx_normal_01",
+    "amount": 1.2,
+    "fee": 0.005,
+    "input_wallets": ["wallet_A"],
+    "output_wallets": ["wallet_B"]
+  },
+  {
+    "txid": "tx_normal_02",
+    "amount": 0.5,
+    "fee": 0.002,
+    "input_wallets": ["wallet_C"],
+    "output_wallets": ["wallet_D", "wallet_E"]
+  },
+  {
+    "txid": "tx_normal_03",
+    "amount": 2.1,
+    "fee": 0.01,
+    "input_wallets": ["wallet_F", "wallet_G"],
+    "output_wallets": ["wallet_H"]
+  },
+  {
+    "txid": "tx_normal_04",
+    "amount": 0.1,
+    "fee": 0.001,
+    "input_wallets": ["wallet_I"],
+    "output_wallets": ["wallet_J"]
+  },
+  {
+    "txid": "tx_normal_05",
+    "amount": 3.4,
+    "fee": 0.015,
+    "input_wallets": ["wallet_K"],
+    "output_wallets": ["wallet_L"]
+  },
+  {
+    "txid": "tx_suspicious_01",
+    "amount": 950.0,
+    "fee": 15.5,
+    "input_wallets": ["wallet_mixer_1", "wallet_mixer_2", "wallet_mixer_3", "wallet_mixer_4", "wallet_mixer_5"],
+    "output_wallets": ["wallet_darknet_1"]
+  },
+  {
+    "txid": "tx_suspicious_02",
+    "amount": 425.0,
+    "fee": 8.2,
+    "input_wallets": ["wallet_stolen_funds"],
+    "output_wallets": ["wallet_laundry_1", "wallet_laundry_2", "wallet_laundry_3", "wallet_laundry_4"]
+  }
+]

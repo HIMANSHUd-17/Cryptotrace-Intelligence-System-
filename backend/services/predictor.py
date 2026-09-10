@@ -2,15 +2,23 @@ import joblib
 import pandas as pd
 import numpy as np
 import shap
+from pathlib import Path
 
 class Predictor:
-    def __init__(self, model_path="model.pkl"):
+    def __init__(self, model_filename="model.pkl"):
+        base_dir = Path(__file__).resolve().parent.parent
+        model_path = base_dir / model_filename
+        if not model_path.exists():
+            model_path = base_dir / "ml" / model_filename
+        if not model_path.exists():
+            model_path = base_dir.parent / "ml" / model_filename
+
         try:
-            self.model = joblib.load(model_path)
-            # Create a TreeExplainer once since tree explainer initialization can be slightly intense
+            self.model = joblib.load(str(model_path))
             self.explainer = shap.TreeExplainer(self.model)
+            print(f"Loaded XGBoost Model: {model_path}")
         except Exception as e:
-            print(f"Warning: Model not found at {model_path}. Start the training script first.")
+            print(f"Warning: Model not found at {model_path}: {e}")
             self.model = None
 
     def predict(self, feature_array):
@@ -29,7 +37,6 @@ class Predictor:
         
         # Calculate SHAP Values
         shap_values = self.explainer.shap_values(df_feats)
-        # Using [0] to get the vector for this specific prediction
         shap_vector = shap_values[0] 
         
         # Pair feature names to SHAP outputs to sort the strongest influencers

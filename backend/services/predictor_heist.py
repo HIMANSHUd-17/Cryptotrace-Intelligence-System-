@@ -2,20 +2,24 @@ import joblib
 import pandas as pd
 import shap
 import numpy as np
-import os
+from pathlib import Path
 
 class HeistPredictor:
     def __init__(self, model_filename="ransomware_model.pkl"):
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(script_dir, "../../ml", model_filename)
-        
+        base_dir = Path(__file__).resolve().parent.parent
+        model_path = base_dir / "ml" / model_filename
+        if not model_path.exists():
+            model_path = base_dir.parent / "ml" / model_filename
+        if not model_path.exists():
+            model_path = base_dir / model_filename
+
         try:
-            self.model = joblib.load(model_path)
+            self.model = joblib.load(str(model_path))
             self.explainer = shap.TreeExplainer(self.model)
             self.feature_names = ["year", "day", "length", "weight", "count", "looped", "neighbors", "income"]
-            print(f"✅ Loaded Heist Model: {model_path}")
+            print(f"Loaded Heist Model: {model_path}")
         except Exception as e:
-            print(f"❌ Failed to load Heist model: {e}")
+            print(f"Failed to load Heist model at {model_path}: {e}")
             self.model = None
 
     def predict(self, feature_array):

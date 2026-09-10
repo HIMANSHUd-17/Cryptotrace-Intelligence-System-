@@ -5,3 +5,9 @@ build/
 .env
 .DS_Store
 .vscode/
+*.csv
+*.pkl
+*.db
+*.sqlite
+*.log
+push_error.txt
