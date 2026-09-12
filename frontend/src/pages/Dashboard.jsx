@@ -90,33 +90,43 @@ export default function Dashboard() {
     }, [safeAlerts, filterType, searchQuery]);
 
     const handleUpload = useCallback(async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
 
         setIsUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
-        let dataType = 'blockchain';
-        if (file.name.toLowerCase().includes('network') || file.name.toLowerCase().includes('ip')) {
-            dataType = 'network';
-        }
-        formData.append('data_type', dataType);
-        formData.append('mode', window.uploadModeDest || 'append'); // Inject mode directive
+        let successCount = 0;
 
         try {
-            await fetch(`${API_BASE}/ingest`, {
-                method: 'POST',
-                body: formData
-            });
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                let dataType = 'blockchain';
+                if (file.name.toLowerCase().includes('network') || file.name.toLowerCase().includes('ip')) {
+                    dataType = 'network';
+                }
+                formData.append('data_type', dataType);
+
+                // Only wipe on the first file of a multi-file batch, otherwise it overrides itself
+                const currentMode = (i === 0) ? (window.uploadModeDest || 'append') : 'append';
+                formData.append('mode', currentMode);
+
+                await fetch(`${API_BASE}/ingest`, {
+                    method: 'POST',
+                    body: formData
+                });
+                successCount++;
+            }
+
             const { clearCache } = await import('../api');
             clearCache();
             const [freshAlerts, freshStats] = await Promise.all([getAlerts(), getSystemStats()]);
             setAlerts(Array.isArray(freshAlerts) ? freshAlerts : []);
             setStats(freshStats);
-            alert(`Successfully ingested ${file.name} as ${dataType} data.`);
+            alert(`Successfully ingested ${successCount} file(s).`);
         } catch (error) {
-            alert('Failed to upload file.');
+            alert('Encountered an error while uploading batch datasets.');
         } finally {
             setIsUploading(false);
             e.target.value = null;
@@ -242,6 +252,7 @@ export default function Dashboard() {
                                         className="hidden"
                                         onChange={handleUpload}
                                         accept=".csv,.json,.xml"
+                                        multiple
                                     />
                                     <button className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold uppercase tracking-widest transition-all ${isUploading ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-electricBlue hover:bg-blue-600 text-slate-900 shadow-[0_0_15px_rgba(59,130,246,0.2)]'}`}>
                                         <Upload className="w-3.5 h-3.5" />
