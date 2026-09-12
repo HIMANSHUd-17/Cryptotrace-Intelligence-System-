@@ -72,23 +72,39 @@ with Session(engine) as db_session:
 
 
 
+def retrain_ml_background():
+    with Session(engine) as db_session:
+        print("Dataset Ingested. Asynchronously retraining ML engine to prevent stale fallback scores...")
+        ANOMALY_DETECTOR.fit(db_session)
+
 @app.post("/api/ingest")
 async def ingest_data(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     data_type: str = Form(...),
+    mode: str = Form("append"),
     db: Session = Depends(get_db)
 ):
     try:
+        # Full dynamic wipe sequence if requested by frontend
+        if mode == "wipe":
+            print("WIPE MODE ENABLED: Purging existing datasets...")
+            db.query(models.NetworkEvent).delete()
+            db.query(models.BlockchainEvent).delete()
+            db.query(models.TransactionEdge).delete()
+            db.query(models.EllipticFeature).delete()
+            db.query(models.HeistFeature).delete()
+            db.commit()
+
         contents = await file.read()
         service = IngestionService(db)
         result = service.process_file(contents, file.filename, data_type)
         
-        processed_txids = result.get("processed_txids", [])
-            
         # Clean up the large array before returning response
         if "processed_txids" in result:
             del result["processed_txids"]
+            
+        background_tasks.add_task(retrain_ml_background)
             
         return result
     except Exception as e:
@@ -140,16 +156,16 @@ def get_entity(tx_id: str, db: Session = Depends(get_db)):
 
 @app.get("/api/graph/global")
 def get_global_graph(db: Session = Depends(get_db)):
-    graph_service = GraphService()
+    graph_service = GraphService(detector=ANOMALY_DETECTOR)
     return graph_service.get_global_graph(db)
 
 @app.get("/api/graph/{txid}")
 @app.get("/api/graph/entity/{txid}")
 def get_entity_graph(txid: str, hops: int = 1, db: Session = Depends(get_db)):
     if txid == "global":
-        graph_service = GraphService()
+        graph_service = GraphService(detector=ANOMALY_DETECTOR)
         return graph_service.get_global_graph(db)
-    graph_service = GraphService()
+    graph_service = GraphService(detector=ANOMALY_DETECTOR)
     return graph_service.get_subgraph(txid, hops, db)
 
 

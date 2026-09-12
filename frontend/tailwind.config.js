@@ -13,9 +13,9 @@ export default {
                 riskLow: '#059669', // emerald-600
                 accentIndigo: '#4f46e5', // indigo-600
                 electricBlue: '#3b82f6', // blue-500
-                darkBg: '#09090b', // zinc-950 / obsidan
-                cardBg: '#18181b', // zinc-900 elevated
-                cardBorder: 'rgba(255, 255, 255, 0.1)'
+                darkBg: '#f8fafc', // slate-50 background body
+                cardBg: '#ffffff', // pure white cards
+                cardBorder: '#e2e8f0' // slate-200 lines
             },
             fontFamily: {
                 sans: ['Inter', 'system-ui', 'sans-serif'],

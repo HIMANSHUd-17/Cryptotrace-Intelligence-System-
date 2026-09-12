@@ -59,17 +59,22 @@ class AnomalyDetector:
         """
         Pulls all historical data from SQL and trains the IsolationForest.
         """
-        print("Training IsolationForest Anomaly Detector on SQL Data...")
+        print("Training IsolationForest Anomaly Detector on SQL Data Sample (Max 15,000)...")
         
-        # Group network events by txid
-        all_net = db_session.query(NetworkEvent).all()
+        all_bc = db_session.query(BlockchainEvent).order_by(BlockchainEvent.timestamp.desc()).limit(15000).all()
+        txids = [bc.txid for bc in all_bc]
+        
+        # Group network events by txid only for the sampled set
+        if txids:
+            all_net = db_session.query(NetworkEvent).filter(NetworkEvent.txid.in_(txids)).all()
+        else:
+            all_net = []
+            
         net_map = {}
         for n in all_net:
             if n.txid not in net_map:
                 net_map[n.txid] = []
             net_map[n.txid].append(n)
-            
-        all_bc = db_session.query(BlockchainEvent).all()
         
         X_train = []
         for bc in all_bc:
