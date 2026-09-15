@@ -10,44 +10,40 @@ class IngestionService:
     def __init__(self, db_session):
         self.db = db_session
 
-    def process_file(self, file_bytes: bytes, filename: str, data_type: str):
+    def process_file_stream(self, file_stream, filename: str, data_type: str):
+        total_inserted = 0
         if filename.endswith(".csv"):
-            df = pd.read_csv(BytesIO(file_bytes))
+            for chunk in pd.read_csv(file_stream, chunksize=20000):
+                total_inserted += self._handle_chunk(chunk, data_type)
         elif filename.endswith(".json"):
-            df = pd.read_json(BytesIO(file_bytes))
+            df = pd.read_json(file_stream)
+            total_inserted += self._handle_chunk(df, data_type)
         elif filename.endswith(".xml"):
-            # Simple xml to dataframe parser for MVP
-            tree = ET.parse(BytesIO(file_bytes))
-            root = tree.getroot()
-            data = []
-            for child in root:
-                data.append(child.attrib)
-            df = pd.DataFrame(data)
+            tree = ET.parse(file_stream)
+            data = [child.attrib for child in tree.getroot()]
+            total_inserted += self._handle_chunk(pd.DataFrame(data), data_type)
         else:
             raise ValueError("Unsupported file format. Please upload CSV, JSON, or XML.")
             
-        # Standardize columns to lowercase stripped strings to prevent silent drops
+        return {"status": "success", "type": data_type, "records_inserted": total_inserted}
+
+    def _handle_chunk(self, df, data_type):
         df.columns = [str(c).lower().strip() for c in df.columns]
         
         column_mapping = {
-            "transaction_id": "txid",
-            "tx_id": "txid",
-            "address": "txid",
-            "transaction_amount_btc": "amount",
-            "network_fee_btc": "fee",
-            "source_ip": "src_ip",
-            "destination_ip": "dst_ip",
+            "transaction_id": "txid", "tx_id": "txid", "address": "txid",
+            "transaction_amount_btc": "amount", "network_fee_btc": "fee",
+            "source_ip": "src_ip", "destination_ip": "dst_ip",
         }
         df = df.rename(columns=column_mapping)
         
-        # Clean data (drop rows missing critical txid correlation key)
         if "txid" in df.columns:
             df = df.dropna(subset=["txid"])
             
         if data_type == "network":
-            return self.store_network_events(df)
+            return self.store_network_events(df).get("records_inserted", 0)
         elif data_type == "blockchain":
-            return self.store_blockchain_events(df)
+            return self.store_blockchain_events(df).get("records_inserted", 0)
         else:
             raise ValueError("data_type must be 'network' or 'blockchain'")
 

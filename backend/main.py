@@ -96,9 +96,8 @@ async def ingest_data(
             db.query(models.HeistFeature).delete()
             db.commit()
 
-        contents = await file.read()
         service = IngestionService(db)
-        result = service.process_file(contents, file.filename, data_type)
+        result = service.process_file_stream(file.file, file.filename, data_type)
         
         # Clean up the large array before returning response
         if "processed_txids" in result:
@@ -109,6 +108,31 @@ async def ingest_data(
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+from scripts.dataset_generator import SyntheticGenerator
+
+@app.post("/api/generate_dataset")
+def generate_dataset(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    try:
+        generator = SyntheticGenerator(db)
+        tx_count, net_count = generator.generate_and_inject(num_normal=80, num_illicit=5)
+        background_tasks.add_task(retrain_ml_background)
+        return {"status": "success", "message": f"Generated {tx_count} synthetic transactions and {net_count} network nodes."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/clear_data")
+def clear_data(db: Session = Depends(get_db)):
+    try:
+        db.query(models.NetworkEvent).delete()
+        db.query(models.BlockchainEvent).delete()
+        db.query(models.TransactionEdge).delete()
+        db.query(models.EllipticFeature).delete()
+        db.query(models.HeistFeature).delete()
+        db.commit()
+        return {"status": "success", "message": "All ingested data has been permanently wiped from the analytical system."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stats")
 def get_stats(db: Session = Depends(get_db)):
@@ -130,10 +154,10 @@ from services.correlation_service import CorrelationService
 @app.get("/api/alerts")
 def get_alerts(db: Session = Depends(get_db), current_user = Depends(get_current_user_optional)):
     t0 = time.perf_counter()
-    # Fetch recent transactions
-    recent_txs = db.query(models.BlockchainEvent).order_by(models.BlockchainEvent.timestamp.desc()).limit(2000).all()
+    # Fetch recent transactions reduced to 500 for SIH lightning response speed
+    recent_txs = db.query(models.BlockchainEvent).order_by(models.BlockchainEvent.timestamp.desc()).limit(500).all()
     t1 = time.perf_counter()
-    with open("server_time.log", "a") as f: f.write(f"SQL Fetch 2000 txs: {t1-t0:.4f}s\n")
+    with open("server_time.log", "a") as f: f.write(f"SQL Fetch 500 txs: {t1-t0:.4f}s\n")
 
     
     service = CorrelationService(db, detector=ANOMALY_DETECTOR)

@@ -11,3 +11,4 @@ numpy
 sqlalchemy
 python-multipart
 orjson
+reportlab

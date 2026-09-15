@@ -133,6 +133,40 @@ export default function Dashboard() {
         }
     }, []);
 
+    const handleClearData = useCallback(async () => {
+        setIsUploading(true);
+        try {
+            await fetch(`${API_BASE}/clear_data`, { method: 'POST' });
+            const { clearCache } = await import('../api');
+            clearCache();
+            const [freshAlerts, freshStats] = await Promise.all([getAlerts(), getSystemStats()]);
+            setAlerts(Array.isArray(freshAlerts) ? freshAlerts : []);
+            setStats(freshStats);
+            alert('Datastore wiped completely.');
+        } catch (error) {
+            alert('Error clearing datastore.');
+        } finally {
+            setIsUploading(false);
+        }
+    }, []);
+
+    const handleGenerateDataset = useCallback(async () => {
+        setIsUploading(true);
+        try {
+            await fetch(`${API_BASE}/generate_dataset`, { method: 'POST' });
+            const { clearCache } = await import('../api');
+            clearCache();
+            const [freshAlerts, freshStats] = await Promise.all([getAlerts(), getSystemStats()]);
+            setAlerts(Array.isArray(freshAlerts) ? freshAlerts : []);
+            setStats(freshStats);
+            alert('Datastore populated with Demo Dataset.');
+        } catch (error) {
+            alert('Error generating demo dataset.');
+        } finally {
+            setIsUploading(false);
+        }
+    }, []);
+
     const handleSelectAlert = useCallback((alertItem) => {
         setSelectedAlert(alertItem);
     }, []);
@@ -272,6 +306,12 @@ export default function Dashboard() {
                                             >
                                                 <Network className="w-3.5 h-3.5 text-electricBlue" /> Append to Current
                                             </button>
+                                            <button
+                                                className="px-3 py-2.5 text-sm font-bold text-left hover:bg-slate-50 flex items-center gap-2 border-t border-slate-100"
+                                                onClick={handleGenerateDataset}
+                                            >
+                                                <Zap className="w-3.5 h-3.5 text-purple-600" /> Generate Demo Dataset
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -302,6 +342,12 @@ export default function Dashboard() {
                                         </button>
                                     ))}
                                 </div>
+                                <button
+                                    onClick={handleClearData}
+                                    className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold uppercase tracking-widest text-riskHigh bg-riskHigh/10 hover:bg-riskHigh/20 border border-riskHigh/20 transition-all shadow-sm group"
+                                >
+                                    <X className="w-4 h-4 text-riskHigh group-hover:scale-110 transition-transform" /> Clear Data
+                                </button>
                             </div>
                         </div>
 

@@ -45,7 +45,7 @@ class CorrelationService:
         if self.detector and hasattr(self.detector, 'predict_batch'):
             batch_results = self.detector.predict_batch(bc_event_list, net_events_list)
         else:
-            batch_results = [(50, "Pending Analysis", [{"name": "ML Risk Engine", "value": 0}, {"name": "Graph Connectivity", "value": 0}]) for _ in valid_txids]
+            batch_results = [(50, "Pending Analysis", [{"name": "Isolation Anomaly Distance", "value": 0}, {"name": "Velocity / Cluster Proximity", "value": 0}, {"name": "Network Entity Association", "value": 0}]) for _ in valid_txids]
 
         seen_entities = set()
 
@@ -106,7 +106,8 @@ class CorrelationService:
                     },
                     "features": features,
                     "timeline": [],
-                    "flow": []
+                    "flow": [],
+                    "ips": associated_ips
                 })
 
             # 2. IP Entity Alert (if synthetic / real IP available)
@@ -130,7 +131,8 @@ class CorrelationService:
                     },
                     "features": features,
                     "timeline": [],
-                    "flow": []
+                    "flow": [],
+                    "ips": [primary_ip]
                 })
 
             # 3. Wallet Entity Alert (if wallet available)

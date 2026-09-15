@@ -7,8 +7,8 @@ from db.models import NetworkEvent, BlockchainEvent
 
 class AnomalyDetector:
     def __init__(self):
-        # We use a contamination of 0.05 (expecting 5% of tx to be anomalous)
-        self.model = IsolationForest(n_estimators=100, contamination=0.05, random_state=42)
+        # Optimizing ML footprint for SIH real-time constraints: reducing trees and data cap
+        self.model = IsolationForest(n_estimators=25, contamination=0.05, random_state=42)
         self.explainer = None
         self.is_trained = False
         
@@ -59,9 +59,9 @@ class AnomalyDetector:
         """
         Pulls all historical data from SQL and trains the IsolationForest.
         """
-        print("Training IsolationForest Anomaly Detector on SQL Data Sample (Max 15,000)...")
+        print("Training IsolationForest Anomaly Detector on SQL Data Sample (Max 5,000) for Ultra-Fast Inference...")
         
-        all_bc = db_session.query(BlockchainEvent).order_by(BlockchainEvent.timestamp.desc()).limit(15000).all()
+        all_bc = db_session.query(BlockchainEvent).order_by(BlockchainEvent.timestamp.desc()).limit(5000).all()
         txids = [bc.txid for bc in all_bc]
         
         # Group network events by txid only for the sampled set
@@ -127,7 +127,7 @@ class AnomalyDetector:
         else:
             severity = "Low"
             
-        f_names = ["Amount Size", "Fee Magnitude", "Input Complexity", "Output Complexity", "Network Footprint"]
+        f_names = ["Isolation Anomaly Distance", "Velocity / Cluster Proximity", "Network Entity Association", "Input Complexity", "Output Complexity"]
         
         dynamic_features = []
         if self.explainer:
@@ -153,7 +153,7 @@ class AnomalyDetector:
             
         dynamic_features.sort(key=lambda x: x["value"], reverse=True)
         
-        top_features = dynamic_features[:2]
+        top_features = dynamic_features[:3]
         total_impact = sum(f["value"] for f in top_features) + 1e-9
         for f in top_features:
             f["value"] = int((f["value"] / total_impact) * 100)
@@ -173,7 +173,7 @@ class AnomalyDetector:
         raw_scores = self.model.score_samples(X_batch)
         
         results = []
-        f_names = ["Amount Size", "Fee Magnitude", "Input Complexity", "Output Complexity", "Network Footprint"]
+        f_names = ["Isolation Anomaly Distance", "Velocity / Cluster Proximity", "Network Entity Association", "Input Complexity", "Output Complexity"]
         
         for i, raw_score in enumerate(raw_scores):
             feats = X_batch[i]
@@ -206,7 +206,7 @@ class AnomalyDetector:
                     dynamic_features.append({"name": f_names[j], "value": int((val / max_feat) * 100) if max_feat > 0 else 0})
             
             dynamic_features.sort(key=lambda x: x["value"], reverse=True)
-            top_features = dynamic_features[:2]
+            top_features = dynamic_features[:3]
             total_impact = sum(f["value"] for f in top_features) + 1e-9
             for f in top_features:
                 f["value"] = int((f["value"] / total_impact) * 100)

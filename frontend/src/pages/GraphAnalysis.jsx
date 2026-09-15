@@ -126,24 +126,25 @@ export default function GraphAnalysis() {
         graphRef.current.d3Force('center', null);
 
         const clusterForce = (alpha) => {
+            const time = Date.now() / 1000;
             graphData.nodes.forEach(node => {
                 const cluster = node.cluster || 0;
-                // Determine fixed angular region for the cluster
                 const baseAngle = (cluster / 6) * 2 * Math.PI;
-                const distance = 1200; // Fixed orbit bounds
+                const spinSpeed = (cluster % 2 === 0 ? 0.15 : -0.15) * (1 + cluster * 0.1);
+                const dynamicAngle = baseAngle + (time * spinSpeed);
+                const breathe = Math.sin(time * (1 + cluster * 0.5)) * 50;
+                const distance = 400 + breathe;
 
-                const targetX = Math.cos(baseAngle) * distance;
-                const targetY = Math.sin(baseAngle) * distance;
+                const targetX = Math.cos(dynamicAngle) * distance;
+                const targetY = Math.sin(dynamicAngle) * distance;
 
-                // Pull toward cluster centroid gently
                 node.vx += (targetX - node.x) * alpha * 0.15;
                 node.vy += (targetY - node.y) * alpha * 0.15;
             });
         };
 
         graphRef.current.d3Force('cluster', clusterForce);
-        graphRef.current.d3Force('charge').distanceMax(2000).strength(-900);
-        graphRef.current.d3Force('link').distance(80);
+        graphRef.current.d3Force('charge').strength(-250);
 
         // Frame target node AND all connected neighbors after physics engine warms up
         const timer = setTimeout(() => {
@@ -194,13 +195,14 @@ export default function GraphAnalysis() {
         const baseSize = node.val || 6;
         const radius = (isHovered || isSelected) ? baseSize * 1.4 : baseSize;
 
-        // Color nodes exclusively by Risk Level per Risk Distribution scheme
-        let color = '#059669'; // Low Risk = Green (default fallback)
-        if (node.risk === 'High') {
-            color = '#e11d48'; // High Risk = Red
-        } else if (node.risk === 'Medium') {
-            color = '#d97706'; // Medium Risk = Orange
-        }
+        // Base colors by entity type (will be overridden by risk)
+        let color = '#8b5cf6'; // Indigo default for IP/Other
+        if (node.type === 'Wallet') color = '#10b981'; // Emerald/Teal
+        else if (node.type === 'Transaction') color = '#3b82f6'; // Electric Blue
+
+        // OVERRIDE: Keep High Risk idea intact
+        if (node.risk === 'High') color = '#e11d48'; // Red for High Risk
+        else if (node.risk === 'Medium') color = '#d97706'; // Amber for Medium Risk
 
         // Outer Glow Pulse
         const time = Date.now() / 1000;
@@ -209,7 +211,7 @@ export default function GraphAnalysis() {
         if (node.risk === 'High' || isSelected || isHighlighted) {
             ctx.beginPath();
             ctx.arc(node.x, node.y, radius + 4 + pulse, 0, 2 * Math.PI);
-            ctx.fillStyle = node.risk === 'High' ? 'rgba(225, 29, 72, 0.2)' : 'rgba(59, 130, 246, 0.2)';
+            ctx.fillStyle = node.risk === 'High' ? 'rgba(225, 29, 72, 0.25)' : 'rgba(59, 130, 246, 0.25)';
             ctx.fill();
         }
 
@@ -237,9 +239,8 @@ export default function GraphAnalysis() {
 
         ctx.fillStyle = color;
         ctx.shadowColor = color;
-        ctx.shadowBlur = (isHovered || isSelected || isHighlighted) ? 12 : 4;
+        ctx.shadowBlur = (isHovered || isSelected || isHighlighted) ? 15 : 8;
         ctx.fill();
-
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = isSelected ? 2.5 : isHighlighted ? 1.5 : 0.8;
         ctx.stroke();
@@ -248,9 +249,9 @@ export default function GraphAnalysis() {
         if (globalScale > 0.8 || isHovered || isSelected || isHighlighted || node.risk === 'High') {
             const label = node.label || node.id;
             ctx.font = `bold ${Math.max(11 / globalScale, 9)}px monospace`;
-            ctx.fillStyle = '#1e293b'; // slate-800 for readability on white
+            ctx.fillStyle = '#1e293b';
             ctx.textAlign = 'center';
-            ctx.shadowColor = '#ffffff'; // white glow around dark text
+            ctx.shadowColor = '#ffffff';
             ctx.shadowBlur = 4;
             ctx.fillText(label, node.x, node.y + radius + 14 / globalScale);
         }
@@ -258,36 +259,18 @@ export default function GraphAnalysis() {
         ctx.restore();
     }, [selectedNode, hoverNode, highlightNodes]);
 
-    // Canvas Link Painter
-    const paintLink = useCallback((link, ctx) => {
-        const isHighlighted = highlightLinks.has(link);
-        const isDimmed = highlightLinks.size > 0 && !isHighlighted;
-
-        ctx.save();
-        if (isDimmed) ctx.globalAlpha = 0.05;
-
-        ctx.beginPath();
-        ctx.moveTo(link.source.x, link.source.y);
-        ctx.lineTo(link.target.x, link.target.y);
-        ctx.strokeStyle = isHighlighted ? '#3b82f6' : 'rgba(0, 0, 0, 0.15)'; // light grey link for white bg
-        ctx.lineWidth = isHighlighted ? 2.5 : 1.2;
-        ctx.stroke();
-
-        ctx.restore();
-    }, [highlightLinks]);
-
     const activeNodeCount = useMemo(() => graphData.nodes.length, [graphData.nodes]);
     const hopCount = useMemo(() => Math.max(0, highlightNodes.size - 1), [highlightNodes]);
 
     return (
-        <div className="flex h-full w-full bg-darkBg text-slate-700 relative overflow-hidden">
+        <div className="flex h-full w-full bg-slate-50 text-slate-700 relative overflow-hidden">
             {/* Anchored Exit Button in Top-Right Corner */}
             <button
                 onClick={handleExit}
                 title="Exit Graph View"
-                className="fixed top-6 right-6 z-50 bg-white border-slate-200 hover:bg-slate-100 text-slate-700 hover:text-slate-900 px-4 py-2.5 rounded-full border border-slate-200 shadow-2xl backdrop-blur-md transition-all cursor-pointer hover:scale-105 flex items-center justify-center gap-2 group"
+                className="fixed top-6 right-6 z-50 bg-white hover:bg-slate-100 text-slate-500 hover:text-slate-900 px-4 py-2.5 rounded-full border border-slate-200 shadow-xl backdrop-blur-md transition-all cursor-pointer hover:scale-105 flex items-center justify-center gap-2 group"
             >
-                <X className="w-4 h-4 text-slate-500 group-hover:text-slate-900" />
+                <X className="w-4 h-4 text-slate-400 group-hover:text-slate-900" />
                 <span className="text-sm font-bold uppercase tracking-wider hidden md:inline">Exit Graph</span>
             </button>
 
@@ -295,7 +278,7 @@ export default function GraphAnalysis() {
             <motion.div
                 initial={{ x: -50, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                className="w-72 shrink-0 border-r border-slate-200 bg-white/80 backdrop-blur-xl flex flex-col z-20 shadow-2xl h-full overflow-hidden"
+                className="w-72 shrink-0 border-r border-slate-200 bg-white/90 backdrop-blur-xl flex flex-col z-20 shadow-2xl h-full overflow-hidden"
             >
                 <div className="p-5 border-b border-slate-200 shrink-0">
                     <div className="flex items-center gap-3">
@@ -310,7 +293,7 @@ export default function GraphAnalysis() {
                 </div>
 
                 <div className="p-5 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
-                    <div className="bg-white shadow-sm border-slate-200 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-3">
                         <div className="flex justify-between items-center text-sm whitespace-nowrap">
                             <span className="text-slate-500 font-medium">Sub-Graph Scope</span>
                             <span className="font-mono text-electricBlue font-bold bg-electricBlue/10 px-2.5 py-0.5 rounded border border-electricBlue/20">
@@ -319,32 +302,32 @@ export default function GraphAnalysis() {
                         </div>
                         <div className="flex justify-between items-center text-sm whitespace-nowrap">
                             <span className="text-slate-500 font-medium">Topological Edges</span>
-                            <span className="font-mono text-slate-800 font-bold bg-white px-2.5 py-0.5 rounded border border-slate-200">
+                            <span className="font-mono text-slate-600 font-bold bg-slate-200/50 px-2.5 py-0.5 rounded border border-slate-300">
                                 {graphData.links.length} Links
                             </span>
                         </div>
                     </div>
 
                     <div className="pt-4 border-t border-slate-200">
-                        <p className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-4">Risk Distribution</p>
+                        <p className="text-[11px] uppercase tracking-widest text-slate-400 font-bold mb-4">Risk Distribution</p>
                         <div className="space-y-3">
                             <div className="flex justify-between items-center text-sm whitespace-nowrap">
-                                <span className="flex items-center gap-2 text-slate-700">
-                                    <span className="w-2 h-2 rounded-full bg-riskHigh shadow-[0_0_8px_theme('colors.riskHigh')]"></span> High Risk
+                                <span className="flex items-center gap-2 text-slate-600">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-riskHigh shadow-[0_0_8px_theme('colors.riskHigh')]"></span> High Risk
                                 </span>
-                                <span className="font-mono text-slate-900 font-bold">{graphData.nodes.filter(n => n.risk === 'High').length}</span>
+                                <span className="font-mono text-slate-800 font-bold">{graphData.nodes.filter(n => n.risk === 'High').length}</span>
                             </div>
                             <div className="flex justify-between items-center text-sm whitespace-nowrap">
-                                <span className="flex items-center gap-2 text-slate-700">
-                                    <span className="w-2 h-2 rounded-full bg-riskMedium shadow-[0_0_8px_theme('colors.riskMedium')]"></span> Medium Risk
+                                <span className="flex items-center gap-2 text-slate-600">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-riskMedium shadow-[0_0_8px_theme('colors.riskMedium')]"></span> Medium Risk
                                 </span>
-                                <span className="font-mono text-slate-900 font-bold">{graphData.nodes.filter(n => n.risk === 'Medium').length}</span>
+                                <span className="font-mono text-slate-800 font-bold">{graphData.nodes.filter(n => n.risk === 'Medium').length}</span>
                             </div>
                             <div className="flex justify-between items-center text-sm whitespace-nowrap">
-                                <span className="flex items-center gap-2 text-slate-700">
-                                    <span className="w-2 h-2 rounded-full bg-riskLow shadow-[0_0_8px_theme('colors.riskLow')]"></span> Low Risk
+                                <span className="flex items-center gap-2 text-slate-600">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-riskLow shadow-[0_0_8px_theme('colors.riskLow')]"></span> Low Risk
                                 </span>
-                                <span className="font-mono text-slate-900 font-bold">{graphData.nodes.filter(n => n.risk === 'Low').length}</span>
+                                <span className="font-mono text-slate-800 font-bold">{graphData.nodes.filter(n => n.risk === 'Low').length}</span>
                             </div>
                         </div>
                     </div>
@@ -352,13 +335,13 @@ export default function GraphAnalysis() {
                     <div className="mt-auto pt-6 flex flex-col gap-3">
                         <button
                             onClick={() => window.location.href = '/graph'}
-                            className="w-full py-2.5 rounded-lg border border-electricBlue/50 hover:bg-electricBlue/20 text-electricBlue text-sm uppercase font-bold tracking-widest transition-all cursor-pointer shadow-[0_0_10px_rgba(59,130,246,0.1)] flex justify-center items-center gap-2"
+                            className="w-full py-2.5 rounded-lg border border-electricBlue/50 hover:bg-electricBlue/10 text-electricBlue text-xs uppercase font-bold tracking-widest transition-all cursor-pointer flex justify-center items-center gap-2"
                         >
                             <Network className="w-3.5 h-3.5" /> View Global Network
                         </button>
                         <button
                             onClick={() => navigate(-1)}
-                            className="w-full py-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 text-sm uppercase font-bold tracking-widest transition-all cursor-pointer"
+                            className="w-full py-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 text-xs uppercase font-bold tracking-widest transition-all cursor-pointer"
                         >
                             Back to Investigation
                         </button>
@@ -371,7 +354,7 @@ export default function GraphAnalysis() {
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
 
                 {loading && (
-                    <div className="absolute inset-0 flex flex-col justify-center items-center text-slate-500 z-10 bg-white/90 backdrop-blur-sm">
+                    <div className="absolute inset-0 flex flex-col justify-center items-center text-slate-500 z-10 bg-white/60 backdrop-blur-sm">
                         <Loader2 className="w-8 h-8 animate-spin mb-4 text-electricBlue" />
                         <p className="tracking-widest uppercase text-sm font-semibold">Tracing Blockchain Subgraphs...</p>
                     </div>
@@ -383,9 +366,25 @@ export default function GraphAnalysis() {
                     height={dimensions.height}
                     graphData={graphData}
                     nodeCanvasObject={paintNode}
-                    nodeRelSize={4}
-                    linkCanvasObject={paintLink}
-                    linkCurvature={0.2}
+                    nodeRelSize={5}
+                    linkColor={link => {
+                        const isHighlighted = highlightLinks.has(link);
+                        const isDimmed = highlightLinks.size > 0 && !isHighlighted;
+                        return isHighlighted ? '#3b82f6' : isDimmed ? 'rgba(0, 0, 0, 0.04)' : 'rgba(59, 130, 246, 0.35)'; // brighter blue on default state
+                    }}
+                    linkWidth={link => {
+                        return highlightLinks.has(link) ? 3.5 : 1.5;
+                    }}
+                    linkDirectionalArrowLength={7}
+                    linkDirectionalArrowRelPos={1}
+                    linkDirectionalParticles={link => {
+                        const isDimmed = highlightLinks.size > 0 && !highlightLinks.has(link);
+                        return isDimmed ? 0 : 1; // Limit to a single slow packet per edge
+                    }}
+                    linkDirectionalParticleWidth={link => highlightLinks.has(link) ? 3 : 2}
+                    linkDirectionalParticleSpeed={0.0015} // Drastically reduced speed to a slow data pulse
+                    linkDirectionalParticleColor={() => '#3b82f6'}
+                    linkCurvature={0}
                     onNodeClick={handleNodeClick}
                     onNodeHover={node => setHoverNode(node)}
                     onBackgroundClick={handleBackgroundClick}
@@ -401,9 +400,9 @@ export default function GraphAnalysis() {
                             placeholder="Search entity in graph..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="bg-transparent focus:outline-none text-slate-800 text-sm flex-1 font-mono placeholder:font-sans placeholder-zinc-500"
+                            className="bg-transparent focus:outline-none text-slate-800 text-sm flex-1 font-mono placeholder:font-sans placeholder-slate-400"
                         />
-                        {search && <X className="w-4 h-4 text-slate-500 cursor-pointer hover:text-slate-900 transition-colors" onClick={() => { setSearch(''); setSelectedNode(null); }} />}
+                        {search && <X className="w-4 h-4 text-slate-400 cursor-pointer hover:text-slate-900 transition-colors" onClick={() => { setSearch(''); setSelectedNode(null); }} />}
                     </div>
 
                     {/* Autocomplete Dropdown */}
@@ -418,34 +417,34 @@ export default function GraphAnalysis() {
                                             setSearch(n.id);
                                             handleNodeClick(n);
                                         }}
-                                        className="px-4 py-2.5 hover:bg-electricBlue/10 cursor-pointer border-b border-slate-200 last:border-0 flex justify-between items-center group transition-colors"
+                                        className="px-4 py-2.5 hover:bg-electricBlue/10 cursor-pointer border-b border-cardBorder/50 last:border-0 flex justify-between items-center group transition-colors"
                                     >
-                                        <span className="text-sm font-mono text-slate-700 group-hover:text-electricBlue transition-colors">{n.id}</span>
-                                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${n.risk === 'High' ? 'bg-riskHigh/20 text-riskHigh' : n.risk === 'Medium' ? 'bg-riskMedium/20 text-riskMedium' : 'bg-riskLow/20 text-riskLow'}`}>
+                                        <span className="text-xs font-mono text-zinc-300 group-hover:text-electricBlue transition-colors">{n.id}</span>
+                                        <span className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded ${n.risk === 'High' ? 'bg-riskHigh/20 text-riskHigh' : n.risk === 'Medium' ? 'bg-riskMedium/20 text-riskMedium' : 'bg-riskLow/20 text-riskLow'}`}>
                                             {n.risk} Node
                                         </span>
                                     </div>
                                 ))}
                             {graphData.nodes.filter(n => String(n.id).toLowerCase().includes(search.toLowerCase()) || (n.label && String(n.label).toLowerCase().includes(search.toLowerCase()))).length === 0 && (
-                                <div className="px-5 py-4 text-sm text-center text-slate-500">No nodes found in current subgraph.</div>
+                                <div className="px-5 py-4 text-xs text-center text-slate-500">No nodes found in current subgraph.</div>
                             )}
                         </div>
                     )}
                 </motion.div>
 
                 {/* Bottom Legend */}
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-white/90 shadow-sm border border-slate-200 px-6 py-2.5 rounded-full flex items-center gap-5 shadow-2xl backdrop-blur-md whitespace-nowrap">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Type:</span>
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full border-2 border-slate-400 bg-transparent"></div><span className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold">Wallet</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 border-2 border-slate-400 bg-transparent rotate-45"></div><span className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold">TX</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[7px] border-b-slate-400"></div><span className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold">IP</span></div>
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-white/90 shadow-lg border border-slate-200 px-6 py-2.5 rounded-full flex items-center gap-5 backdrop-blur-md whitespace-nowrap">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Type:</span>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full border-2 border-slate-600 bg-slate-50"></div><span className="text-[11px] text-slate-700 uppercase tracking-widest font-semibold">Wallet</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 border-2 border-slate-600 bg-slate-50 rotate-45"></div><span className="text-[11px] text-slate-700 uppercase tracking-widest font-semibold">TX</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[7px] border-b-slate-600"></div><span className="text-[11px] text-slate-700 uppercase tracking-widest font-semibold">IP</span></div>
 
                     <div className="w-px h-4 bg-slate-300 mx-1"></div>
 
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Risk:</span>
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#e11d48] shadow-[0_0_5px_#e11d48]"></div><span className="text-[11px] text-riskHigh font-bold uppercase tracking-widest">High</span></div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Risk:</span>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#e11d48]"></div><span className="text-[11px] text-riskHigh font-bold uppercase tracking-widest">High</span></div>
                     <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#d97706]"></div><span className="text-[11px] text-riskMedium font-bold uppercase tracking-widest">Med</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#059669]"></div><span className="text-[11px] text-riskLow font-bold uppercase tracking-widest">Low</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-300"></div><span className="text-[11px] text-slate-600 font-bold uppercase tracking-widest">Low</span></div>
                 </div>
 
                 {/* Floating Details Panel */}
@@ -460,36 +459,40 @@ export default function GraphAnalysis() {
                         >
                             <div className="absolute top-0 right-0 w-16 h-16 bg-electricBlue/20 blur-2xl rounded-full pointer-events-none"></div>
 
-                            <div className="flex justify-between items-start mb-4 border-b border-slate-200 pb-3">
+                            <div className="flex justify-between items-center mb-6">
                                 <div>
-                                    <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1.5">Entity Profile</h3>
-                                    <p className="text-sm font-mono text-slate-900 break-all leading-tight font-bold">{selectedNode.label || selectedNode.id}</p>
+                                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Entity Profile</h3>
+                                    <div className="font-mono text-sm text-slate-800 break-all">{selectedNode.label || selectedNode.id}</div>
                                 </div>
-                                <button onClick={() => setSelectedNode(null)} className="text-slate-500 hover:text-slate-900 transition-colors bg-white hover:bg-slate-100 p-1.5 rounded-lg border border-slate-200 cursor-pointer">
-                                    <X className="w-3.5 h-3.5" />
+                                <button onClick={() => window.location.href = '/graph'} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-900 transition-colors shrink-0">
+                                    <X className="w-4 h-4" />
                                 </button>
                             </div>
 
-                            <div className="space-y-3 mb-6">
-                                <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200">
-                                    <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Node Type</span>
-                                    <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold tracking-wider font-mono uppercase border border-slate-200 shadow-inner">{selectedNode.type}</span>
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-3">
+                                    <span className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Node Type</span>
+                                    <span className="font-mono text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded text-xs border border-slate-200">
+                                        {selectedNode.type.toUpperCase()}
+                                    </span>
                                 </div>
                                 {selectedNode.amount && (
-                                    <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200">
-                                        <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Amount</span>
-                                        <span className="text-xs text-slate-700 px-2 py-0.5 rounded font-bold tracking-wider font-mono uppercase bg-slate-100 border border-slate-200 shadow-inner">{selectedNode.amount} BTC</span>
+                                    <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-3">
+                                        <span className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Amount</span>
+                                        <span className="font-mono text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded text-xs border border-slate-200">
+                                            {selectedNode.amount} BTC
+                                        </span>
                                     </div>
                                 )}
-                                <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200">
-                                    <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Connections</span>
-                                    <span className="text-xs text-electricBlue font-bold font-mono px-2 py-0.5 bg-electricBlue/10 border border-electricBlue/20 rounded shadow-inner tracking-tight">
+                                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-3">
+                                    <span className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Connections</span>
+                                    <span className="font-mono text-electricBlue bg-electricBlue/10 px-2.5 py-0.5 rounded text-[11px] border border-electricBlue/20">
                                         In: {(graphData.links || []).filter(l => l.target === selectedNode || l.target.id === selectedNode.id).length} &middot; Out: {(graphData.links || []).filter(l => l.source === selectedNode || l.source.id === selectedNode.id).length}
                                     </span>
                                 </div>
-                                <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200">
-                                    <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Threat Risk</span>
-                                    <span className={`text-xs font-bold px-2 py-0.5 rounded border shadow-inner ${selectedNode.risk === 'High' ? 'bg-riskHigh/20 text-riskHigh border-riskHigh/30 ' : selectedNode.risk === 'Medium' ? 'bg-riskMedium/20 text-riskMedium border-riskMedium/30' : 'bg-riskLow/20 text-riskLow border-riskLow/30'}`}>
+                                <div className="flex justify-between items-center text-sm pb-1">
+                                    <span className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Threat Risk</span>
+                                    <span className={`font-mono text-[11px] font-bold px-2.5 py-0.5 rounded border ${selectedNode.risk === 'High' ? 'bg-riskHigh/10 text-riskHigh border-riskHigh/20' : selectedNode.risk === 'Medium' ? 'bg-riskMedium/10 text-riskMedium border-riskMedium/20' : 'bg-riskLow/10 text-riskLow border-riskLow/20'}`}>
                                         {selectedNode.risk} ({selectedNode.val * 20})
                                     </span>
                                 </div>
@@ -497,7 +500,7 @@ export default function GraphAnalysis() {
 
                             <button
                                 onClick={() => navigate(`/investigation?id=${selectedNode.id}`)}
-                                className="w-full flex items-center justify-center gap-2 py-3 bg-electricBlue hover:bg-blue-600 text-slate-900 rounded-xl text-sm uppercase font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_20px_rgba(59,130,246,0.5)] cursor-pointer"
+                                className="mt-6 w-full flex items-center justify-center gap-2 py-2.5 bg-electricBlue hover:bg-blue-600 text-white rounded-lg text-xs uppercase font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_20px_rgba(59,130,246,0.5)] cursor-pointer"
                             >
                                 Deep Investigation <ArrowRight className="w-3.5 h-3.5" />
                             </button>
@@ -505,6 +508,6 @@ export default function GraphAnalysis() {
                     )}
                 </AnimatePresence>
             </div>
-        </div>
+        </div >
     );
 }
