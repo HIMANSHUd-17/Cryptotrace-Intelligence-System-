@@ -11,7 +11,7 @@ echo [+] Launching FastAPI Machine Learning Backend...
 start "CryptoTrace ML Backend" cmd /k "cd backend && uvicorn main:app --reload --port 8000"
 
 echo [+] Launching React/Vite Frontend Interface...
-start "CryptoTrace Frontend" cmd /k "npm run dev"
+start "CryptoTrace Frontend" cmd /k "cd frontend && npm run dev"
 
 echo.
 echo =======================================================

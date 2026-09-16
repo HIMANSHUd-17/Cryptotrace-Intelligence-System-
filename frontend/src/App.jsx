@@ -31,19 +31,19 @@ function App() {
     const [profileOpen, setProfileOpen] = useState(false);
 
     useEffect(() => {
-        const authFlag = localStorage.getItem('sih_auth');
+        const authFlag = sessionStorage.getItem('sih_auth');
         if (authFlag === 'true') {
             setIsAuthenticated(true);
         }
     }, []);
 
     const handleLogin = () => {
-        localStorage.setItem('sih_auth', 'true');
+        sessionStorage.setItem('sih_auth', 'true');
         setIsAuthenticated(true);
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('sih_auth');
+        sessionStorage.removeItem('sih_auth');
         window.location.href = '/';
     };
 

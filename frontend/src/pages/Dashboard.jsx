@@ -3,7 +3,7 @@ import { Activity, ShieldAlert, Cpu, Network, Zap, Search, Filter, X, CheckCircl
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { getAlerts, getSystemStats, API_BASE } from '../api';
+import { getAlerts, getSystemStats, API_BASE, clearCache } from '../api';
 import IPGlobeMap from '../components/IPGlobeMap';
 
 const containerVariants = {
@@ -119,7 +119,6 @@ export default function Dashboard() {
                 successCount++;
             }
 
-            const { clearCache } = await import('../api');
             clearCache();
             const [freshAlerts, freshStats] = await Promise.all([getAlerts(), getSystemStats()]);
             setAlerts(Array.isArray(freshAlerts) ? freshAlerts : []);
@@ -137,7 +136,6 @@ export default function Dashboard() {
         setIsUploading(true);
         try {
             await fetch(`${API_BASE}/clear_data`, { method: 'POST' });
-            const { clearCache } = await import('../api');
             clearCache();
             const [freshAlerts, freshStats] = await Promise.all([getAlerts(), getSystemStats()]);
             setAlerts(Array.isArray(freshAlerts) ? freshAlerts : []);
@@ -154,7 +152,6 @@ export default function Dashboard() {
         setIsUploading(true);
         try {
             await fetch(`${API_BASE}/generate_dataset`, { method: 'POST' });
-            const { clearCache } = await import('../api');
             clearCache();
             const [freshAlerts, freshStats] = await Promise.all([getAlerts(), getSystemStats()]);
             setAlerts(Array.isArray(freshAlerts) ? freshAlerts : []);
